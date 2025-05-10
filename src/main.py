@@ -45,6 +45,19 @@ async def on_message(message):
 
 
 async def broadcast_dm(interaction: discord.Interaction):
+    # ギルドとメンバーを取得
+    guild = interaction.guild
+    member = interaction.user
+
+    # 「副団長」ロールをチェック
+    role_name = "副団長"
+    if not discord.utils.get(member.roles, name=role_name):
+        await interaction.response.send_message(
+            f"⛔ このコマンドは「{role_name}」ロールを持っている人だけが実行できます。",
+            ephemeral=True
+        )
+        return
+    
     await interaction.response.send_message("📨 DMの送信を開始します...")
 
     try:
