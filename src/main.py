@@ -5,6 +5,8 @@ import asyncio
 import json
 import config
 from datetime import datetime, time
+import csv
+from io import StringIO
 
 # ファイルパスを定数化
 USER_SETTINGS_FILE = "./src/user_settings.json"
@@ -297,6 +299,66 @@ async def check_birthdays():
         if channel:
             user_lines = "\n".join(f"🎉 {user}" for user in birthday_users)
             await channel.send(f"🎂 本日誕生日のメンバー:\n{user_lines}\nお祝いの準備をしましょう！")
+
+
+@bot.tree.command(name="export_stage_csv", description="ステージ情報をCSVにしてDMで受け取る")
+async def export_stage_csv(interaction: discord.Interaction):
+    # ギルドとメンバーを取得
+    guild = interaction.guild
+    member = interaction.user
+
+    # 「副団長」ロールをチェック
+    role_name = "副団長"
+    if not discord.utils.get(member.roles, name=role_name):
+        await interaction.response.send_message(
+            f"⛔ このコマンドは「{role_name}」ロールを持っている人だけが実行できます。",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message("📦 CSVファイルを作成しています。DMを確認してください！", ephemeral=True)
+
+    try:
+        data = get_user_settings()
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ ユーザー設定の読み込みに失敗しました: {e}")
+        return
+
+    # CSV作成（メモリ上）
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["期", "名前", "カナ", "パート", "副指揮", "正指揮", "ドイツリート", "髙田曲"])
+
+    for user_id, info in data.items():
+        term = info.get("term", "不明")
+        name = info.get("name_kanji", "不明")
+        kana = info.get("name_kana", "不明")
+        part = info.get("part", "不明")
+        stage = info.get("stage", {})
+        writer.writerow([
+            term,
+            name,
+            kana,
+            part,
+            "乗る" if stage.get("first") else "乗らない",
+            "乗る" if stage.get("second") else "乗らない",
+            "乗る" if stage.get("german") else "乗らない",
+            "乗る" if stage.get("takata") else "乗らない",
+        ])
+
+    output.seek(0)
+    csv_content = output.getvalue()
+    output.close()
+
+    # DM送信
+    try:
+        dm = await interaction.user.create_dm()
+        await dm.send(
+            content="📄 以下がステージ情報のCSVファイルです。",
+            file=discord.File(fp=StringIO(csv_content), filename="stage_info.csv")
+        )
+    except Exception as e:
+        await interaction.followup.send(f"❌ DMの送信に失敗しました: {e}")
 
 
 bot.run(config.DISCORD_TOKEN)
