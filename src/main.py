@@ -9,11 +9,11 @@ import csv
 from io import StringIO
 
 # local用
-USER_SETTINGS_FILE = "./src/user_settings.json"
-GUILD_ID_FILE = "./src/guild_id.txt"
+# USER_SETTINGS_FILE = "./src/user_settings.json"
+# GUILD_ID_FILE = "./src/guild_id.txt"
 # dockercontainer用
-# USER_SETTINGS_FILE = "/shared_data/user_settings.json"
-# GUILD_ID_FILE = "/shared_data/guild_id.txt"
+USER_SETTINGS_FILE = "/shared_data/user_settings.json"
+GUILD_ID_FILE = "/shared_data/guild_id.txt"
 
 intents = discord.Intents.default()
 intents.message_content = True
