@@ -8,9 +8,12 @@ from datetime import datetime, time
 import csv
 from io import StringIO
 
-# ファイルパスを定数化
+# local用
 USER_SETTINGS_FILE = "./src/user_settings.json"
 GUILD_ID_FILE = "./src/guild_id.txt"
+# dockercontainer用
+# USER_SETTINGS_FILE = "/shared_data/user_settings.json"
+# GUILD_ID_FILE = "/shared_data/guild_id.txt"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -56,10 +59,10 @@ async def broadcast_dm(interaction: discord.Interaction):
     if not discord.utils.get(member.roles, name=role_name):
         await interaction.response.send_message(
             f"⛔ このコマンドは「{role_name}」ロールを持っている人だけが実行できます。",
-            ephemeral=True
+            ephemeral=True,
         )
         return
-    
+
     await interaction.response.send_message("📨 DMの送信を開始します...")
 
     try:
@@ -92,7 +95,9 @@ async def broadcast_dm(interaction: discord.Interaction):
                 continue
 
             dm = await member.create_dm()
-            await dm.send(f"👋 {info.get('name_kanji', '不明')}さん、こんにちは！以下のメッセージにリアクションをして活動調査に回答してください")
+            await dm.send(
+                f"👋 {info.get('name_kanji', '不明')}さん、こんにちは！以下のメッセージにリアクションをして活動調査に回答してください"
+            )
             tmp = {}  # stage項目を初期化
             await activity_investigation(int(user_id_str), dm, tmp)
             await confirm_activity_investigation(int(user_id_str), dm, tmp)
@@ -102,7 +107,9 @@ async def broadcast_dm(interaction: discord.Interaction):
             print(f"❌ DM送信失敗 ({user_id_str}): {e}")
             fail_count += 1
 
-    await interaction.followup.send(f"✅ DM送信完了！成功: {success_count}人 / 失敗: {fail_count}人")
+    await interaction.followup.send(
+        f"✅ DM送信完了！成功: {success_count}人 / 失敗: {fail_count}人"
+    )
 
 
 async def activity_investigation(user, channel, data):
@@ -124,7 +131,11 @@ async def activity_investigation(user, channel, data):
         await msg.add_reaction("❎")
 
         def check(reaction, u):
-            return u == user and reaction.message.id == msg.id and str(reaction.emoji) in ["✅", "❎"]
+            return (
+                u == user
+                and reaction.message.id == msg.id
+                and str(reaction.emoji) in ["✅", "❎"]
+            )
 
         reaction, _ = await bot.wait_for("reaction_add", check=check)
         data["stage"][key] = str(reaction.emoji) == "✅"
@@ -162,7 +173,11 @@ async def confirm_activity_investigation(user, channel, data):
             await msg.add_reaction(emoji)
 
         def check(reaction, u):
-            return u == user and reaction.message.id == msg.id and str(reaction.emoji) in emoji_map
+            return (
+                u == user
+                and reaction.message.id == msg.id
+                and str(reaction.emoji) in emoji_map
+            )
 
         reaction, _ = await bot.wait_for("reaction_add", check=check)
         selected = emoji_map[str(reaction.emoji)]
@@ -182,7 +197,11 @@ async def confirm_activity_investigation(user, channel, data):
         await msg.add_reaction("❎")
 
         def stage_check(reaction, u):
-            return u == user and reaction.message.id == msg.id and str(reaction.emoji) in ["✅", "❎"]
+            return (
+                u == user
+                and reaction.message.id == msg.id
+                and str(reaction.emoji) in ["✅", "❎"]
+            )
 
         reaction, _ = await bot.wait_for("reaction_add", check=stage_check)
         data["stage"][selected] = str(reaction.emoji) == "✅"
@@ -191,12 +210,16 @@ async def confirm_activity_investigation(user, channel, data):
 async def finalize_roles_and_save(user, data, channel):
     guild_id = read_guild_id_from_file()
     if guild_id is None:
-        await channel.send("⚠️ サーバーIDが正しく読み込めませんでした。管理者にお問い合わせください。")
+        await channel.send(
+            "⚠️ サーバーIDが正しく読み込めませんでした。管理者にお問い合わせください。"
+        )
         return
 
     guild = bot.get_guild(guild_id)
     if guild is None:
-        await channel.send("⚠️ サーバーが見つかりませんでした。Botが参加しているか確認してください。")
+        await channel.send(
+            "⚠️ サーバーが見つかりませんでした。Botが参加しているか確認してください。"
+        )
         return
 
     member = guild.get_member(user.id)
@@ -251,9 +274,13 @@ def read_guild_id_from_file(filename=GUILD_ID_FILE):
         return None
 
 
-@bot.tree.command(name="set_server-id", description="guild_id.txt にサーバーIDを記録します")
+@bot.tree.command(
+    name="set_server-id", description="guild_id.txt にサーバーIDを記録します"
+)
 async def set_server_id(interaction: discord.Interaction):
-    await interaction.response.send_message("サーバーIDをこのチャンネルで送信してください。")
+    await interaction.response.send_message(
+        "サーバーIDをこのチャンネルで送信してください。"
+    )
 
     def check(m):
         return m.author == interaction.user and m.channel == interaction.channel
@@ -261,7 +288,9 @@ async def set_server_id(interaction: discord.Interaction):
     try:
         msg = await bot.wait_for("message", check=check, timeout=60.0)
     except asyncio.TimeoutError:
-        await interaction.followup.send("⚠️ 時間切れです。もう一度 `/set_server-id` を実行してください。")
+        await interaction.followup.send(
+            "⚠️ 時間切れです。もう一度 `/set_server-id` を実行してください。"
+        )
         return
 
     with open(GUILD_ID_FILE, "w", encoding="utf-8") as f:
@@ -270,7 +299,7 @@ async def set_server_id(interaction: discord.Interaction):
     await interaction.followup.send("✅ サーバーIDを `guild_id.txt` に書き込みました。")
 
 
-@tasks.loop(time=time(hour=18, minute=30))  # 毎日18:30に実行
+@tasks.loop(time=time(hour=9, minute=0))  # 毎日9時に実行
 async def check_birthdays():
     today = datetime.now()
     today_month = today.month
@@ -285,7 +314,10 @@ async def check_birthdays():
 
     birthday_users = []
     for user_id, info in data.items():
-        if info.get("birth_month") == today_month and info.get("birth_day") == today_day:
+        if (
+            info.get("birth_month") == today_month
+            and info.get("birth_day") == today_day
+        ):
             name = info.get("name_kanji", "不明")
             part = info.get("part", "不明")
             term = info.get("term", "不明")
@@ -298,10 +330,14 @@ async def check_birthdays():
         channel = discord.utils.get(guild.text_channels, name="副団長用")
         if channel:
             user_lines = "\n".join(f"🎉 {user}" for user in birthday_users)
-            await channel.send(f"🎂 本日誕生日のメンバー:\n{user_lines}\nお祝いの準備をしましょう！")
+            await channel.send(
+                f"🎂 本日誕生日のメンバー:\n{user_lines}\nお祝いの準備をしましょう！"
+            )
 
 
-@bot.tree.command(name="export_stage_csv", description="ステージ情報をCSVにしてDMで受け取る")
+@bot.tree.command(
+    name="export_stage_csv", description="ステージ情報をCSVにしてDMで受け取る"
+)
 async def export_stage_csv(interaction: discord.Interaction):
     # ギルドとメンバーを取得
     guild = interaction.guild
@@ -312,11 +348,13 @@ async def export_stage_csv(interaction: discord.Interaction):
     if not discord.utils.get(member.roles, name=role_name):
         await interaction.response.send_message(
             f"⛔ このコマンドは「{role_name}」ロールを持っている人だけが実行できます。",
-            ephemeral=True
+            ephemeral=True,
         )
         return
 
-    await interaction.response.send_message("📦 CSVファイルを作成しています。DMを確認してください！", ephemeral=True)
+    await interaction.response.send_message(
+        "📦 CSVファイルを作成しています。DMを確認してください！", ephemeral=True
+    )
 
     try:
         data = get_user_settings()
@@ -327,7 +365,9 @@ async def export_stage_csv(interaction: discord.Interaction):
     # CSV作成（メモリ上）
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["期", "名前", "カナ", "パート", "副指揮", "正指揮", "ドイツリート", "髙田曲"])
+    writer.writerow(
+        ["期", "名前", "カナ", "パート", "副指揮", "正指揮", "ドイツリート", "髙田曲"]
+    )
 
     for user_id, info in data.items():
         term = info.get("term", "不明")
@@ -335,16 +375,18 @@ async def export_stage_csv(interaction: discord.Interaction):
         kana = info.get("name_kana", "不明")
         part = info.get("part", "不明")
         stage = info.get("stage", {})
-        writer.writerow([
-            term,
-            name,
-            kana,
-            part,
-            "乗る" if stage.get("first") else "乗らない",
-            "乗る" if stage.get("second") else "乗らない",
-            "乗る" if stage.get("german") else "乗らない",
-            "乗る" if stage.get("takata") else "乗らない",
-        ])
+        writer.writerow(
+            [
+                term,
+                name,
+                kana,
+                part,
+                "乗る" if stage.get("first") else "乗らない",
+                "乗る" if stage.get("second") else "乗らない",
+                "乗る" if stage.get("german") else "乗らない",
+                "乗る" if stage.get("takata") else "乗らない",
+            ]
+        )
 
     output.seek(0)
     csv_content = output.getvalue()
@@ -355,7 +397,7 @@ async def export_stage_csv(interaction: discord.Interaction):
         dm = await interaction.user.create_dm()
         await dm.send(
             content="📄 以下がステージ情報のCSVファイルです。",
-            file=discord.File(fp=StringIO(csv_content), filename="stage_info.csv")
+            file=discord.File(fp=StringIO(csv_content), filename="stage_info.csv"),
         )
     except Exception as e:
         await interaction.followup.send(f"❌ DMの送信に失敗しました: {e}")
