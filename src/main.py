@@ -9,8 +9,8 @@ import csv
 from io import StringIO
 
 # local用
-# USER_SETTINGS_FILE = "./src/user_settings.json"
-# GUILD_ID_FILE = "./src/guild_id.txt"
+# USER_SETTINGS_FILE = "user_settings.json"
+# GUILD_ID_FILE = "guild_id.json"
 # dockercontainer用
 USER_SETTINGS_FILE = "/shared_data/user_settings.json"
 GUILD_ID_FILE = "/shared_data/guild_id.txt"
@@ -272,31 +272,6 @@ def read_guild_id_from_file(filename=GUILD_ID_FILE):
     except (FileNotFoundError, ValueError):
         print("❌ サーバーIDの読み込みに失敗しました")
         return None
-
-
-@bot.tree.command(
-    name="set_server-id", description="guild_id.txt にサーバーIDを記録します"
-)
-async def set_server_id(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "サーバーIDをこのチャンネルで送信してください。"
-    )
-
-    def check(m):
-        return m.author == interaction.user and m.channel == interaction.channel
-
-    try:
-        msg = await bot.wait_for("message", check=check, timeout=60.0)
-    except asyncio.TimeoutError:
-        await interaction.followup.send(
-            "⚠️ 時間切れです。もう一度 `/set_server-id` を実行してください。"
-        )
-        return
-
-    with open(GUILD_ID_FILE, "w", encoding="utf-8") as f:
-        f.write(f"{msg.content}\n")
-
-    await interaction.followup.send("✅ サーバーIDを `guild_id.txt` に書き込みました。")
 
 
 @tasks.loop(time=time(hour=9, minute=0))  # 毎日9時に実行
