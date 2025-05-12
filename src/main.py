@@ -8,12 +8,14 @@ from datetime import datetime, time
 import csv
 from io import BytesIO, StringIO
 
+PATH_TIME_CONFIG = "setting_birthday_message.json"
+PATH_SERVER_VERSION = "server_version.txt"
 # local用
-USER_SETTINGS_FILE = "./src/user_settings.json"
-GUILD_ID_FILE = "./src/guild_id.json"
+PATH_GUILD_JSON = "guild_id.json"
+PATH_USER_SETTINGS = "user_settings.json"
 # dockercontainer用
-# USER_SETTINGS_FILE = "/shared_data/user_settings.json"
-# GUILD_ID_FILE = "/shared_data/guild_id.txt"
+# PATH_GUILD_JSON = "/shared_data/guild_id.txt"
+# PATH_USER_SETTINGS = "/shared_data/user_settings.json"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -255,22 +257,45 @@ async def finalize_roles_and_save(user, data, channel):
     save_user_settings(user_settings)
 
 
-def get_user_settings(filename=USER_SETTINGS_FILE):
+def get_user_settings(filename=PATH_USER_SETTINGS):
     with open(filename, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_user_settings(data, filename=USER_SETTINGS_FILE):
+def save_user_settings(data, filename=PATH_USER_SETTINGS):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 
-def read_guild_id_from_file(filename=GUILD_ID_FILE):
+def read_guild_id_from_file(
+    json_path=PATH_GUILD_JSON, version_path=PATH_SERVER_VERSION
+):
     try:
-        with open(filename, "r") as f:
-            return int(f.read().strip())
-    except (FileNotFoundError, ValueError):
-        print("❌ サーバーIDの読み込みに失敗しました")
+        with open(version_path, "r") as vf:
+            version_str = vf.read().strip()
+            version = int(version_str)
+    except FileNotFoundError:
+        print(f"❌ {version_path} が見つかりませんでした")
+        return None
+    except ValueError:
+        print("❌ server_version.txt に無効な整数が含まれています")
+        return None
+
+    try:
+        with open(json_path, "r") as jf:
+            guilds = json.load(jf)
+            guild_id = guilds.get(str(version))  # キーは文字列である必要がある
+            if guild_id is None:
+                print(
+                    f"❌ バージョン {version} に対応する guild_id が見つかりませんでした"
+                )
+                return None
+            return int(guild_id)
+    except FileNotFoundError:
+        print(f"❌ {json_path} が見つかりませんでした")
+        return None
+    except json.JSONDecodeError:
+        print("❌ guild_id.json の読み込み中にエラーが発生しました")
         return None
 
 
@@ -281,7 +306,7 @@ async def check_birthdays():
     today_day = today.day
 
     try:
-        with open(USER_SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(PATH_USER_SETTINGS, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         print("ユーザー設定読み込みエラー:", e)
