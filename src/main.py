@@ -6,14 +6,14 @@ import json
 import config
 from datetime import datetime, time
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
 
 # local用
-# USER_SETTINGS_FILE = "user_settings.json"
-# GUILD_ID_FILE = "guild_id.json"
+USER_SETTINGS_FILE = "./src/user_settings.json"
+GUILD_ID_FILE = "./src/guild_id.json"
 # dockercontainer用
-USER_SETTINGS_FILE = "/shared_data/user_settings.json"
-GUILD_ID_FILE = "/shared_data/guild_id.txt"
+# USER_SETTINGS_FILE = "/shared_data/user_settings.json"
+# GUILD_ID_FILE = "/shared_data/guild_id.txt"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -274,7 +274,7 @@ def read_guild_id_from_file(filename=GUILD_ID_FILE):
         return None
 
 
-@tasks.loop(time=time(hour=9, minute=0))  # 毎日9時に実行
+@tasks.loop(time=time(hour=9, minute=0))  # 毎日指定した時間に実行
 async def check_birthdays():
     today = datetime.now()
     today_month = today.month
@@ -311,10 +311,10 @@ async def check_birthdays():
 
 
 @bot.tree.command(
-    name="export_stage_csv", description="ステージ情報をCSVにしてDMで受け取る"
+    name="export_stage_csv",
+    description="ステージ情報をCSVにして副団長用チャンネルに送る",
 )
 async def export_stage_csv(interaction: discord.Interaction):
-    # ギルドとメンバーを取得
     guild = interaction.guild
     member = interaction.user
 
@@ -328,7 +328,8 @@ async def export_stage_csv(interaction: discord.Interaction):
         return
 
     await interaction.response.send_message(
-        "📦 CSVファイルを作成しています。DMを確認してください！", ephemeral=True
+        "📦 CSVファイルを作成しています。副団長用チャンネルを確認してください！",
+        ephemeral=True,
     )
 
     try:
@@ -337,45 +338,62 @@ async def export_stage_csv(interaction: discord.Interaction):
         await interaction.followup.send(f"⚠️ ユーザー設定の読み込みに失敗しました: {e}")
         return
 
-    # CSV作成（メモリ上）
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        ["期", "名前", "カナ", "パート", "副指揮", "正指揮", "ドイツリート", "髙田曲"]
-    )
-
+    # ヘッダーとデータの準備
+    rows = []
     for user_id, info in data.items():
         term = info.get("term", "不明")
         name = info.get("name_kanji", "不明")
         kana = info.get("name_kana", "不明")
         part = info.get("part", "不明")
         stage = info.get("stage", {})
-        writer.writerow(
-            [
-                term,
-                name,
-                kana,
-                part,
-                "乗る" if stage.get("first") else "乗らない",
-                "乗る" if stage.get("second") else "乗らない",
-                "乗る" if stage.get("german") else "乗らない",
-                "乗る" if stage.get("takata") else "乗らない",
-            ]
-        )
+        row = [
+            term,
+            name,
+            kana,
+            part,
+            "乗る" if stage.get("first") else "乗らない",
+            "乗る" if stage.get("second") else "乗らない",
+            "乗る" if stage.get("german") else "乗らない",
+            "乗る" if stage.get("takata") else "乗らない",
+        ]
+        rows.append(row)
 
-    output.seek(0)
-    csv_content = output.getvalue()
+    # パート→期の順でソート
+    def sort_key(row):
+        part_order = {"S": 0, "A": 1, "T": 2, "B": 3}
+        part = row[3]
+        term = row[0]
+        return (part_order.get(part, 99), int(term) if str(term).isdigit() else 999)
+
+    rows.sort(key=sort_key)
+
+    # CSV書き込み
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["期", "名前", "カナ", "パート", "副指揮", "正指揮", "ドイツリート", "髙田曲"]
+    )
+    for row in rows:
+        writer.writerow(row)
+
+    csv_bytes = BytesIO(output.getvalue().encode("utf-8"))
     output.close()
 
-    # DM送信
+    # 「副団長用」チャンネルに送信（チャンネル名で検索）
+    channel = discord.utils.get(guild.text_channels, name="副団長用")
+    if channel is None:
+        await interaction.followup.send(
+            "❌ チャンネル『副団長用』が見つかりませんでした。"
+        )
+        return
+
     try:
-        dm = await interaction.user.create_dm()
-        await dm.send(
-            content="📄 以下がステージ情報のCSVファイルです。",
-            file=discord.File(fp=StringIO(csv_content), filename="stage_info.csv"),
+        await channel.send(
+            content=f"📄 {member.display_name} がエクスポートしたステージ情報CSVです。",
+            file=discord.File(fp=csv_bytes, filename="stage_info.csv"),
         )
     except Exception as e:
-        await interaction.followup.send(f"❌ DMの送信に失敗しました: {e}")
+        await interaction.followup.send(f"❌ チャンネルへの送信に失敗しました: {e}")
 
 
 bot.run(config.DISCORD_TOKEN)
