@@ -421,4 +421,48 @@ async def export_stage_csv(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ チャンネルへの送信に失敗しました: {e}")
 
 
+@bot.tree.command(
+    name="set_time", description="設定時刻（hour, minute）をJSONに記録します"
+)
+async def set_time(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "🕘 時（0〜23）を数字でこのチャンネルに送ってください。"
+    )
+
+    def check(m: discord.Message):
+        return m.author == interaction.user and m.channel == interaction.channel
+
+    try:
+        hour_msg = await bot.wait_for("message", check=check, timeout=60.0)
+        hour = int(hour_msg.content)
+        if not (0 <= hour <= 23):
+            raise ValueError("時は 0〜23 の範囲で入力してください。")
+
+        await interaction.followup.send("🕓 分（0〜59）を数字で送ってください。")
+        minute_msg = await bot.wait_for("message", check=check, timeout=60.0)
+        minute = int(minute_msg.content)
+        if not (0 <= minute <= 59):
+            raise ValueError("分は 0〜59 の範囲で入力してください。")
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send(
+            "⚠️ 時間切れです。もう一度 `/set_time` を実行してください。"
+        )
+        return
+    except ValueError as e:
+        await interaction.followup.send(f"⚠️ 入力エラー: {e}")
+        return
+
+    # ファイル保存処理
+    try:
+        os.makedirs(os.path.dirname(PATH_TIME_CONFIG), exist_ok=True)
+        with open(PATH_TIME_CONFIG, "w", encoding="utf-8") as f:
+            json.dump({"hour": hour, "minute": minute}, f, ensure_ascii=False, indent=4)
+        await interaction.followup.send(
+            f"✅ 時刻 {hour:02d}:{minute:02d} を `time_config.json` に保存しました。"
+        )
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ 書き込みに失敗しました: {e}")
+
+
 bot.run(config.DISCORD_TOKEN)
