@@ -8,7 +8,7 @@ from datetime import datetime, time
 import csv
 from io import BytesIO, StringIO
 
-PATH_TIME_CONFIG = "setting_birthday_message.json"
+PATH_TIME_CONFIG = "./src/setting_birthday_message.json"
 PATH_SERVER_VERSION = "server_version.txt"
 # local用
 PATH_GUILD_JSON = "guild_id.json"
@@ -299,21 +299,36 @@ def read_guild_id_from_file(
         return None
 
 
-@tasks.loop(time=time(hour=9, minute=0))  # 毎日指定した時間に実行
+@tasks.loop(minutes=1)
 async def check_birthdays():
-    today = datetime.now()
-    today_month = today.month
-    today_day = today.day
+    now = datetime.now()
 
+    # 実行時刻の読み込み
+    try:
+        with open(PATH_TIME_CONFIG, "r", encoding="utf-8") as f:
+            time_config = json.load(f)
+        target_hour = time_config.get("hour", 9)
+        target_minute = time_config.get("minute", 0)
+    except Exception as e:
+        print("実行時刻の読み込みエラー:", e)
+        return
+
+    if now.hour != target_hour or now.minute != target_minute:
+        return  # 指定された時刻でなければスキップ
+
+    # ユーザー設定読み込み
     try:
         with open(PATH_USER_SETTINGS, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            user_data = json.load(f)
     except Exception as e:
         print("ユーザー設定読み込みエラー:", e)
         return
 
+    today_month = now.month
+    today_day = now.day
     birthday_users = []
-    for user_id, info in data.items():
+
+    for user_id, info in user_data.items():
         if (
             info.get("birth_month") == today_month
             and info.get("birth_day") == today_day
@@ -324,15 +339,70 @@ async def check_birthdays():
             birthday_users.append(f"{name}（{term}期・{part}）")
 
     if not birthday_users:
+        return  # 誕生日ユーザーがいない場合は何もしない
+
+    # バージョンとサーバーIDの読み込み
+    try:
+        with open(PATH_SERVER_VERSION, "r", encoding="utf-8") as f:
+            version = f.read().strip()
+        with open(PATH_GUILD_JSON, "r", encoding="utf-8") as f:
+            versioned_servers = json.load(f)
+        target_server_ids = versioned_servers.get(version, [])
+    except Exception as e:
+        print("サーバー情報の読み込みエラー:", e)
         return
 
+    # メッセージ作成
+    user_lines = "\n".join(f"🎉 {user}" for user in birthday_users)
+    message = f"🎂 本日誕生日のメンバー:\n{user_lines}\nお祝いの準備をしましょう！"
+
+    # 指定されたサーバーだけに送信
     for guild in bot.guilds:
+        if guild.id not in target_server_ids:
+            continue
+
         channel = discord.utils.get(guild.text_channels, name="副団長用")
         if channel:
-            user_lines = "\n".join(f"🎉 {user}" for user in birthday_users)
-            await channel.send(
-                f"🎂 本日誕生日のメンバー:\n{user_lines}\nお祝いの準備をしましょう！"
-            )
+            await channel.send(message)
+
+
+@bot.tree.command(
+    name="set_assistant-server-version",
+    description="サーバのバージョンを記録します",
+)
+async def set_server_version(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "使用するサーバの年度を数字のみでこのチャンネルで送ってください。"
+    )
+
+    def check(m):
+        return m.author == interaction.user and m.channel == interaction.channel
+
+    try:
+        msg = await bot.wait_for("message", check=check, timeout=60.0)
+    except asyncio.TimeoutError:
+        await interaction.followup.send(
+            "⚠️ 時間切れです。もう一度 `/set_server_version` を実行してください。"
+        )
+        return
+
+    if not msg.content.isdigit():
+        await interaction.followup.send(
+            "⚠️ 入力は数字のみでお願いします。もう一度 `/set_server_version` を実行してください。"
+        )
+        return
+
+    # ファイルパスを安全な場所に設定
+    file_path = os.path.join(os.path.dirname(__file__), PATH_SERVER_VERSION)
+
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(f"{msg.content}\n")
+        await interaction.followup.send("✅ サーバのバージョンを書き込みました。")
+    except PermissionError:
+        await interaction.followup.send(
+            "⚠️ ファイルへの書き込みに失敗しました。パーミッションを確認してください。"
+        )
 
 
 @bot.tree.command(
@@ -422,7 +492,8 @@ async def export_stage_csv(interaction: discord.Interaction):
 
 
 @bot.tree.command(
-    name="set_time", description="設定時刻（hour, minute）をJSONに記録します"
+    name="set_message-sending-time",
+    description="設定時刻（hour, minute）をJSONに記録します",
 )
 async def set_time(interaction: discord.Interaction):
     await interaction.response.send_message(

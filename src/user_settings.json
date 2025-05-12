@@ -1,10 +1,21 @@
 {
     "1239245183069982811": {
-        "name_kanji": "田口瑛啓",
-        "name_kana": "タグチアキヒロ",
+        "name_kanji": "a",
+        "name_kana": "あ",
         "birth_month": "05",
         "birth_day": "26",
         "term": "50",
-        "part": "バス"
+        "part": "T",
+        "is_newcomer": false,
+        "position": {
+            "executive": true,
+            "technique": true,
+            "concert": false,
+            "third_party": false
+        },
+        "job": {
+            "vice": false,
+            "publicity": false
+        }
     }
 }
