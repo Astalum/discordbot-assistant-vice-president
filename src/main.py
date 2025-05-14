@@ -8,8 +8,8 @@ from datetime import datetime, time
 import csv
 from io import BytesIO, StringIO
 
-PATH_TIME_CONFIG = "./src/setting_birthday_message.json"
-PATH_SERVER_VERSION = "./src/server_version.txt"
+PATH_TIME_CONFIG = "setting_birthday_message.json"
+PATH_SERVER_VERSION = "server_version.txt"
 # local用
 # PATH_GUILD_JSON = "guild_id.json"
 # PATH_USER_SETTINGS = "user_settings.json"
